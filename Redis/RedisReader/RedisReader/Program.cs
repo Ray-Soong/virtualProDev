@@ -3,8 +3,7 @@ using StackExchange.Redis;
 using Newtonsoft.Json;
 using System.Collections.Generic;
 
-// Define a class to represent the structure of your JSON objects
-class RgvInfo
+public class RedisRgvDataModel
 {
     public string BankID { get; set; }
     public string id { get; set; }
@@ -28,22 +27,31 @@ namespace RedisReader
         {
             // Replace these values with your Redis server connection information
             string redisConnectionString = "localhost:6379";
-            string redisKey = "exampleKey";
+            string redisKey = "rgv_realtime_info";
 
             // Connect to Redis
             ConnectionMultiplexer redis = ConnectionMultiplexer.Connect(redisConnectionString);
             IDatabase db = redis.GetDatabase();
 
-            // Read content from Redis
-            string redisContent = db.StringGet(redisKey);
+            // Subscribe to the Redis channel for notifications
+            ISubscriber subscriber = redis.GetSubscriber();
+            subscriber.Subscribe("rgv_realtime_info_channel", (channel, value) =>
+            {
+                // Read content from Redis when a notification is received
+                string redisContent = db.ListLeftPop(redisKey);
 
-            // Display the retrieved content
-            Console.WriteLine($"Content retrieved from Redis: {redisContent}");
+                // Deserialize JSON to a list of objects
+                List<RedisRgvDataModel> rgvDataList = JsonConvert.DeserializeObject<List<RedisRgvDataModel>>(redisContent);
+
+                // Process the received data as needed
+                Console.WriteLine($"Received data from Redis: {redisContent}");
+            });
+
+            Console.WriteLine("Redis Reader waiting for notifications. Press Enter to exit.");
+            Console.ReadLine();
 
             // Close the Redis connection
             redis.Close();
-
-            Console.ReadLine();
         }
     }
 }

@@ -46,6 +46,9 @@ namespace RedisWriter
             // Deserialize JSON to a list of objects
             List<RedisRgvDataModel> rgvdataList = JsonConvert.DeserializeObject<List<RedisRgvDataModel>>(jsonRgvData);
 
+            //Publish a notification
+            ISubscriber subscriber = redis.GetSubscriber();
+            subscriber.Publish("rgv_realtime_info_channel", "NewDataAvailable");
             // Convert the list of objects to RedisValue array
             RedisValue[] redisValues = rgvdataList.ConvertAll(x => (RedisValue)JsonConvert.SerializeObject(x)).ToArray();
 
