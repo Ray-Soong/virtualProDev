@@ -21,7 +21,7 @@ namespace RedisWriter
         public string Speed { get; set; }
         public string TimeSpan { get; set; }
     }
-
+    
     class Program
     {
         static void Main(string[] args)
@@ -29,37 +29,52 @@ namespace RedisWriter
             // Replace these values with your Redis server connection information
             string redisConnectionString = "localhost:6379";
             string redisRgvKey = "rgv_realtime_info";
-            string redisHoistKey = "hoist_realtime_info";
+            string redisChannel = "rgv_realtime_info_channel";
 
-            // Sample JSON array
-            string jsonRgvData = @"[
-            {'BankID':'3','id':'1','FaultCode':'0','floor':'1','enable':'2','HasBox':'1','Position':'3','SourcePosition':'0','TargetPosition':'0','TaskID':'','Speed':null,'TimeSpan':'1705215686'},
-            {'BankID':'3','id':'2','FaultCode':'0','floor':'0','enable':'0','HasBox':'0','Position':'0','SourcePosition':'0','TargetPosition':'0','TaskID':'','Speed':null,'TimeSpan':'1705215686'},
-            {'BankID':'3','id':'3','FaultCode':'0','floor':'0','enable':'0','HasBox':'0','Position':'0','SourcePosition':'0','TargetPosition':'0','TaskID':'','Speed':null,'TimeSpan':'1705215686'},
-            {'BankID':'3','id':'4','FaultCode':'0','floor':'0','enable':'0','HasBox':'0','Position':'0','SourcePosition':'0','TargetPosition':'0','TaskID':'','Speed':null,'TimeSpan':'1705215686'},
-            {'BankID':'3','id':'5','FaultCode':'0','floor':'0','enable':'0','HasBox':'0','Position':'0','SourcePosition':'0','TargetPosition':'0','TaskID':'','Speed':null,'TimeSpan':'1705215686'}
-            ]";
             // Connect to Redis
             ConnectionMultiplexer redis = ConnectionMultiplexer.Connect(redisConnectionString);
             IDatabase db = redis.GetDatabase();
-
-            // Deserialize JSON to a list of objects
-            List<RedisRgvDataModel> rgvdataList = JsonConvert.DeserializeObject<List<RedisRgvDataModel>>(jsonRgvData);
-
-            //Publish a notification
             ISubscriber subscriber = redis.GetSubscriber();
-            subscriber.Publish("rgv_realtime_info_channel", "NewDataAvailable");
-            // Convert the list of objects to RedisValue array
-            RedisValue[] redisValues = rgvdataList.ConvertAll(x => (RedisValue)JsonConvert.SerializeObject(x)).ToArray();
 
-            // Add or update the Redis list
-            db.ListRightPush(redisRgvKey, redisValues);
+            // Run the writer loop
+            while (true)
+            {
+                // Create a new list to store RGV data
+                List<RedisRgvDataModel> rgvDataList = new List<RedisRgvDataModel>();
 
-            // Close the Redis connection
-            redis.Close();
+                // Sample JSON array
+                string jsonRgvData = @"[
+                    {'BankID':'3','id':'1','FaultCode':'0','floor':'1','enable':'2','HasBox':'1','Position':'3','SourcePosition':'0','TargetPosition':'0','TaskID':'','Speed':null,'TimeSpan':'1705215686'},
+                    {'BankID':'3','id':'2','FaultCode':'0','floor':'0','enable':'0','HasBox':'0','Position':'0','SourcePosition':'0','TargetPosition':'0','TaskID':'','Speed':null,'TimeSpan':'1705215686'},
+                    {'BankID':'3','id':'3','FaultCode':'0','floor':'0','enable':'0','HasBox':'0','Position':'0','SourcePosition':'0','TargetPosition':'0','TaskID':'','Speed':null,'TimeSpan':'1705215686'},
+                    {'BankID':'3','id':'4','FaultCode':'0','floor':'0','enable':'0','HasBox':'0','Position':'0','SourcePosition':'0','TargetPosition':'0','TaskID':'','Speed':null,'TimeSpan':'1705215686'},
+                    {'BankID':'3','id':'5','FaultCode':'0','floor':'0','enable':'0','HasBox':'0','Position':'0','SourcePosition':'0','TargetPosition':'0','TaskID':'','Speed':null,'TimeSpan':'1705215686'}
+                ]";
 
-            Console.WriteLine("Data added to Redis list successfully.");
-            Console.ReadLine(); // To keep the console window open for viewing results
+                // Deserialize JSON to a list of objects
+                rgvDataList = JsonConvert.DeserializeObject<List<RedisRgvDataModel>>(jsonRgvData);
+
+                // Set the TimeSpan property to the current time with the specified format
+                string currentTime = DateTime.Now.ToString("yyyy-MM-dd:HHmmss.fff");
+                foreach (var rgvData in rgvDataList)
+                {
+                    rgvData.TimeSpan = currentTime;
+                }
+
+                // Convert the list of objects to RedisValue array
+                RedisValue[] redisValues = rgvDataList.ConvertAll(x => (RedisValue)JsonConvert.SerializeObject(x)).ToArray();
+
+                // Add or update the Redis list
+                db.ListRightPush(redisRgvKey, redisValues);
+
+                // Publish a notification on the channel
+                subscriber.Publish(redisChannel, "NewDataAvailable");
+
+                Console.WriteLine($"Data added to Redis list at {currentTime}");
+
+                // Wait for one second
+                System.Threading.Thread.Sleep(1000);
+            }
         }
     }
 }
